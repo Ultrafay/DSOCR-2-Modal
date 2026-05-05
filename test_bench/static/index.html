@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSOCR-2 Test Bench — Invoice Processor</title>
+  <meta name="description" content="Upload invoices for OCR extraction via DeepSeek-OCR + GPT-4o-mini structured extraction">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: #1a2035;
+      --bg-card-hover: #1e2642;
+      --border: #2a3454;
+      --border-active: #6366f1;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --success: #22c55e;
+      --success-bg: rgba(34, 197, 94, 0.1);
+      --error: #ef4444;
+      --error-bg: rgba(239, 68, 68, 0.1);
+      --warning: #f59e0b;
+      --gradient-start: #6366f1;
+      --gradient-end: #8b5cf6;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .header-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+    .header h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.1rem;
+    }
+
+    /* ── Main layout ─────────────────────────────────── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* ── Drop zone ───────────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: var(--bg-card);
+      position: relative;
+      overflow: hidden;
+    }
+    .drop-zone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, var(--accent-glow) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--border-active);
+      background: var(--bg-card-hover);
+    }
+    .drop-zone:hover::before, .drop-zone.drag-over::before {
+      opacity: 1;
+    }
+    .drop-zone-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      position: relative;
+      z-index: 1;
+    }
+    .drop-zone h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      position: relative;
+      z-index: 1;
+    }
+    .drop-zone p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      position: relative;
+      z-index: 1;
+    }
+    .drop-zone input[type="file"] {
+      display: none;
+    }
+
+    /* ── File list ───────────────────────────────────── */
+    .file-list {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .file-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 0.4rem 0.8rem 0.4rem 1rem;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      animation: fadeIn 0.25s ease;
+    }
+    .file-chip .remove-btn {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: none;
+      background: var(--error-bg);
+      color: var(--error);
+      cursor: pointer;
+      font-size: 0.7rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .file-chip .remove-btn:hover {
+      background: var(--error);
+      color: white;
+    }
+
+    /* ── Process button ──────────────────────────────── */
+    .actions {
+      margin-top: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .btn-process {
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px var(--accent-glow);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-process:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+    .btn-process:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-process.processing {
+      pointer-events: none;
+    }
+    .btn-process.processing::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+    .status-text {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Summary bar ─────────────────────────────────── */
+    .summary-bar {
+      margin-top: 2rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      animation: fadeIn 0.35s ease;
+    }
+    .summary-stat {
+      text-align: center;
+    }
+    .summary-stat .value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .summary-stat .label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 0.2rem;
+    }
+    .summary-stat .value.success { color: var(--success); }
+    .summary-stat .value.error { color: var(--error); }
+    .summary-stat .value.cost { color: var(--warning); }
+
+    /* ── Results cards ───────────────────────────────── */
+    .results-section {
+      margin-top: 2rem;
+    }
+    .results-section h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      overflow: hidden;
+      animation: fadeIn 0.35s ease;
+    }
+    .result-card.success { border-left: 3px solid var(--success); }
+    .result-card.error   { border-left: 3px solid var(--error); }
+
+    .result-header {
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .result-header:hover {
+      background: var(--bg-card-hover);
+    }
+    .result-header .left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .result-header .status-badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 100px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .result-header .status-badge.success {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+    .result-header .status-badge.error {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+    .result-header .filename {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .result-header .meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 1rem;
+    }
+    .result-header .chevron {
+      transition: transform 0.3s ease;
+      color: var(--text-muted);
+    }
+    .result-card.expanded .chevron {
+      transform: rotate(180deg);
+    }
+
+    .result-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+    }
+    .result-card.expanded .result-body {
+      max-height: 3000px;
+    }
+    .result-body-inner {
+      padding: 0 1.25rem 1.25rem;
+    }
+
+    /* ── Invoice data table ──────────────────────────── */
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .data-item {
+      background: var(--bg-secondary);
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 0.9rem;
+    }
+    .data-item .key {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.2rem;
+    }
+    .data-item .val {
+      font-size: 0.88rem;
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    /* ── Line items table ────────────────────────────── */
+    .line-items-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+      color: var(--text-secondary);
+    }
+    .line-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .line-items-table th {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.68rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .line-items-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+    .line-items-table tr:last-child td {
+      border-bottom: none;
+    }
+    .line-items-table .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .error-detail {
+      background: var(--error-bg);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      color: var(--error);
+      font-size: 0.85rem;
+      font-family: 'Courier New', monospace;
+      word-break: break-word;
+    }
+
+    /* ── Animations ──────────────────────────────────── */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* ── Responsive ──────────────────────────────────── */
+    @media (max-width: 768px) {
+      .container { padding: 1rem; }
+      .header { padding: 1rem; }
+      .data-grid { grid-template-columns: 1fr; }
+      .line-items-table { font-size: 0.72rem; }
+      .summary-bar { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-icon">📄</div>
+    <div>
+      <h1>DSOCR-2 Test Bench</h1>
+      <p>DeepSeek-OCR → GPT-4o-mini Structured Extraction → Google Sheets</p>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- ── Drop Zone ──────────────────────────────────── -->
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-zone-icon">📤</div>
+      <h2>Drag & drop invoices here</h2>
+      <p>PDF, JPG, PNG — or click to browse</p>
+      <input type="file" id="fileInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp">
+    </div>
+
+    <!-- ── File Chips ─────────────────────────────────── -->
+    <div class="file-list" id="fileList"></div>
+
+    <!-- ── Actions ────────────────────────────────────── -->
+    <div class="actions">
+      <button class="btn-process" id="processBtn" disabled>
+        ⚡ Process Invoices
+      </button>
+      <span class="status-text" id="statusText"></span>
+    </div>
+
+    <!-- ── Summary ────────────────────────────────────── -->
+    <div class="summary-bar" id="summaryBar" style="display:none;"></div>
+
+    <!-- ── Results ────────────────────────────────────── -->
+    <div class="results-section" id="resultsSection" style="display:none;">
+      <h2>Extraction Results</h2>
+      <div id="resultsList"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────────────
+    let selectedFiles = [];
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileList = document.getElementById('fileList');
+    const processBtn = document.getElementById('processBtn');
+    const statusText = document.getElementById('statusText');
+    const summaryBar = document.getElementById('summaryBar');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsList = document.getElementById('resultsList');
+
+    // ── Drop zone events ─────────────────────────────────
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      addFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => {
+      addFiles(fileInput.files);
+      fileInput.value = '';
+    });
+
+    function addFiles(fileListInput) {
+      for (const f of fileListInput) {
+        const ext = f.name.split('.').pop().toLowerCase();
+        if (!['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) continue;
+        if (selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) continue;
+        selectedFiles.push(f);
+      }
+      renderFileChips();
+    }
+
+    function removeFile(index) {
+      selectedFiles.splice(index, 1);
+      renderFileChips();
+    }
+
+    function renderFileChips() {
+      fileList.innerHTML = '';
+      selectedFiles.forEach((f, i) => {
+        const chip = document.createElement('div');
+        chip.className = 'file-chip';
+        const icon = f.name.toLowerCase().endsWith('.pdf') ? '📕' : '🖼️';
+        const size = (f.size / 1024).toFixed(0);
+        chip.innerHTML = `
+          <span>${icon} ${f.name} <span style="color:var(--text-muted)">(${size} KB)</span></span>
+          <button class="remove-btn" onclick="removeFile(${i})">✕</button>
+        `;
+        fileList.appendChild(chip);
+      });
+      processBtn.disabled = selectedFiles.length === 0;
+    }
+
+    // ── Process ──────────────────────────────────────────
+    processBtn.addEventListener('click', async () => {
+      if (selectedFiles.length === 0) return;
+
+      processBtn.disabled = true;
+      processBtn.classList.add('processing');
+      processBtn.textContent = '⏳ Processing…';
+      statusText.textContent = `Sending ${selectedFiles.length} file(s) — this may take 30-90s per file (OCR cold start)…`;
+      statusText.style.animation = 'pulse 2s infinite';
+      summaryBar.style.display = 'none';
+      resultsSection.style.display = 'none';
+
+      const formData = new FormData();
+      selectedFiles.forEach(f => formData.append('files', f));
+
+      try {
+        const resp = await fetch('/process', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          throw new Error(data.detail || JSON.stringify(data));
+        }
+
+        renderSummary(data.summary);
+        renderResults(data.results);
+
+      } catch (err) {
+        statusText.textContent = `Error: ${err.message}`;
+        statusText.style.color = 'var(--error)';
+        statusText.style.animation = 'none';
+      }
+
+      processBtn.disabled = false;
+      processBtn.classList.remove('processing');
+      processBtn.textContent = '⚡ Process Invoices';
+    });
+
+    // ── Render summary ───────────────────────────────────
+    function renderSummary(s) {
+      statusText.textContent = '';
+      statusText.style.animation = 'none';
+
+      summaryBar.style.display = 'grid';
+      summaryBar.innerHTML = `
+        <div class="summary-stat">
+          <div class="value">${s.total_files}</div>
+          <div class="label">Files</div>
+        </div>
+        <div class="summary-stat">
+          <div class="value success">${s.successful}</div>
+          <div class="label">Successful</div>
+        </div>
+        <div class="summary-stat">
+          <div class="value error">${s.failed}</div>
+          <div class="label">Failed</div>
+        </div>
+        <div class="summary-stat">
+          <div class="value cost">$${s.total_estimated_cost_usd.toFixed(4)}</div>
+          <div class="label">Est. Cost</div>
+        </div>
+      `;
+    }
+
+    // ── Render results ───────────────────────────────────
+    function renderResults(results) {
+      resultsSection.style.display = 'block';
+      resultsList.innerHTML = '';
+
+      results.forEach((r, idx) => {
+        const card = document.createElement('div');
+        card.className = `result-card ${r.status}`;
+
+        const tokens = r.token_usage;
+        const metaHtml = tokens
+          ? `<span>${tokens.total_tokens} tokens</span><span>$${tokens.estimated_cost_usd.toFixed(4)}</span>`
+          : '';
+        const sheetsIcon = r.sheets_logged ? '📊 Logged' : '';
+
+        card.innerHTML = `
+          <div class="result-header" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="left">
+              <span class="status-badge ${r.status}">${r.status}</span>
+              <span class="filename">${r.filename}</span>
+              ${sheetsIcon ? `<span style="font-size:0.75rem;color:var(--success)">${sheetsIcon}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:1rem;">
+              <div class="meta">${metaHtml}</div>
+              <span class="chevron">▼</span>
+            </div>
+          </div>
+          <div class="result-body">
+            <div class="result-body-inner" id="body-${idx}"></div>
+          </div>
+        `;
+        resultsList.appendChild(card);
+
+        const body = document.getElementById(`body-${idx}`);
+        if (r.status === 'success' && r.invoice_data) {
+          renderInvoiceData(body, r.invoice_data);
+        } else if (r.error) {
+          body.innerHTML = `<div class="error-detail">${escapeHtml(r.error)}</div>`;
+        }
+      });
+    }
+
+    function renderInvoiceData(container, inv) {
+      // ── Top-level fields grid ──
+      const fields = [
+        ['Supplier', inv.supplier_name],
+        ['Invoice #', inv.invoice_number],
+        ['Date', inv.date],
+        ['Due Date', inv.due_date],
+        ['Supplier TRN', inv.supplier_trn],
+        ['Bill To', inv.bill_to],
+        ['Currency', inv.currency],
+        ['Total', fmt(inv.total_amount)],
+        ['Excl. Amount', fmt(inv.exclusive_amount)],
+        ['VAT Amount', fmt(inv.vat_amount)],
+        ['Tax %', inv.invoice_tax_percentage != null ? inv.invoice_tax_percentage + '%' : '—'],
+        ['Credit Terms', inv.credit_terms],
+        ['GL Suggested', inv.gl_code_suggested],
+        ['Location', inv.supplier_location_category],
+        ['Confidence', inv.extraction_confidence],
+        ['Notes', inv.notes],
+      ].filter(([, v]) => v != null && v !== '' && v !== '—');
+
+      let html = '<div class="data-grid">';
+      fields.forEach(([k, v]) => {
+        html += `<div class="data-item"><div class="key">${escapeHtml(k)}</div><div class="val">${escapeHtml(String(v))}</div></div>`;
+      });
+      html += '</div>';
+
+      // ── Line items table ──
+      const items = inv.line_items || [];
+      if (items.length > 0) {
+        html += '<div class="line-items-title">Line Items</div>';
+        html += `<table class="line-items-table">
+          <thead><tr>
+            <th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit Price</th>
+            <th class="num">Amount</th><th>Tax Code</th><th>GL Code</th>
+          </tr></thead><tbody>`;
+        items.forEach((item, i) => {
+          html += `<tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(item.description || '')}</td>
+            <td class="num">${item.quantity ?? ''}</td>
+            <td class="num">${fmt(item.unit_price)}</td>
+            <td class="num">${fmt(item.amount)}</td>
+            <td>${escapeHtml(item.tax_code || item.qbo_tax_code || '')}</td>
+            <td>${escapeHtml(item.gl_code || '')}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function fmt(n) {
+      if (n == null) return '—';
+      return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>
